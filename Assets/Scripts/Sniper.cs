@@ -11,11 +11,7 @@ public class Sniper : Unit
 
         damage = 35;
         speed = 5;
-    }
 
-    // Update is called once per frame
-    void Update()
-    {
-        
+        Init();
     }
 }
