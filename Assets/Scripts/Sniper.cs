@@ -12,6 +12,8 @@ public class Sniper : Unit
         damage = 35;
         speed = 5;
 
+        maxDistance = 20;
+
         Init();
     }
 }

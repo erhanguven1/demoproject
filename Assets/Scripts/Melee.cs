@@ -12,6 +12,8 @@ public class Melee : Unit
         damage = 20;
         speed = 8;
 
+        maxDistance = 2;
+
         Init();
     }
 }

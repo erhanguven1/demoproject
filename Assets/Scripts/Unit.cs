@@ -2,31 +2,92 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using Photon.Bolt;
+using UnityEngine.UI;
+using UnityEngine.EventSystems;
 
 public enum UnitType { Sniper, Melee }
 
-public class Unit : MonoBehaviour, ISelectable
+public class Unit : EntityEventListener<IUnitState>, ISelectable, IPointerUpHandler
 {
     public UnitType unitType;
 
-    public int team;
+    private int team = -1;
 
     public float speed = 5;
 
-    internal int health = 100;
+    [SerializeField]internal int health = 100;
+    public Image healthBar;
 
     internal int damage;
 
     private bool isSelected;
 
     public float energy = 100;
+    public Image energyBar;
+
     private int movementEnergyCost = 15;
+
+    public float maxDistance;
+
+    private LineRenderer lineRenderer;
+
+    public bool isMobile;
+
+    [SerializeField] private Joystick movementJoystick, attackJoystick;
+
 
     public void Init()
     {
-        transform.GetChild(0).GetComponent<MeshRenderer>().material.color = team == 0 ? Color.blue : Color.red;
+        isMobile = GameManager.instance.isMobile;
+
+        movementJoystick = GameObject.Find("MovementJoystick").GetComponent<Joystick>();
+        attackJoystick = GameObject.Find("AttackJoystick").GetComponent<Joystick>();
+
+        lineRenderer = gameObject.AddComponent<LineRenderer>();
+        lineRenderer.positionCount = 2;
+        lineRenderer.startWidth = .1f;
+        lineRenderer.material = GameManager.instance.lineMaterial;
+
+        healthBar.fillAmount = (1.0f * health) / 100;
 
         TurnManager.onNewTurnStarted += OnNewTurnStarted;
+        state.AddCallback("teamId", TeamChanged);
+
+        StartCoroutine(setTeam());
+        IEnumerator setTeam()
+        {
+            yield return new WaitForSeconds(1.5f);
+            if (entity.IsOwner)
+            {
+                team = UnitSelectionUIManager.instance.teamId;
+                state.teamId = team.ToString();
+
+                transform.GetChild(0).GetComponent<MeshRenderer>().material.color = team == 0 ? Color.blue : Color.red;
+            }
+        }
+    }
+
+    private void OnDestroy()
+    {
+        TurnManager.onNewTurnStarted -= OnNewTurnStarted;
+    }
+
+    public override void Attached()
+    {
+        state.SetTransforms(state.Transform, transform);
+        if (entity.IsOwner)
+        {
+            state.energy = energy;
+        }
+
+        state.AddCallback("energy", EnergyChanged);
+    }
+
+    void EnergyChanged()
+    {
+        energy = state.energy;
+        energyBar.fillAmount = energy / 100;
     }
 
     private void OnNewTurnStarted()
@@ -34,6 +95,8 @@ public class Unit : MonoBehaviour, ISelectable
         energy = 100;
         health += 5;
         health = Mathf.Min(100, health);
+        healthBar.fillAmount = (1.0f * health) / 100;
+        energyBar.fillAmount = energy / 100;
     }
 
     public void Select()
@@ -56,42 +119,119 @@ public class Unit : MonoBehaviour, ISelectable
         }
     }
 
-    // Update is called once per frame
+    public void TeamChanged()
+    {
+        team = int.Parse(state.teamId);
+        transform.GetChild(0).GetComponent<MeshRenderer>().material.color = team == 0 ? Color.blue : Color.red;
+    }
+
     void FixedUpdate()
     {
-        if (!isSelected) return;
+        lineRenderer.SetPosition(0, transform.position);
+        lineRenderer.SetPosition(1, transform.position);
 
-        transform.position += speed * Time.fixedDeltaTime * (Input.GetAxis("Vertical") * Vector3.forward + Input.GetAxis("Horizontal") * Vector3.right);
+        if (!isSelected || energy <= 0 || !entity.IsOwner || !TurnManager.instance.isMyTurn) return;
 
-        if(Input.GetAxis("Horizontal") != 0 || Input.GetAxis("Vertical") != 0)
+        int dir = team == 0 ? 1 : -1;
+
+        if (!isMobile)
         {
-            energy -= Time.deltaTime * movementEnergyCost;
+            transform.position += dir * speed * Time.fixedDeltaTime * (Input.GetAxis("Vertical") * Vector3.forward + Input.GetAxis("Horizontal") * Vector3.right);
+        }
+        else
+        {
+            transform.position += dir * speed * Time.fixedDeltaTime * (movementJoystick.Vertical * Vector3.forward + movementJoystick.Horizontal * Vector3.right);
+        }
+
+        float verticalMovement = !isMobile ? Input.GetAxis("Vertical") : movementJoystick.Vertical;
+        float horizontalMovement = !isMobile ? Input.GetAxis("Horizontal") : movementJoystick.Horizontal;
+
+        if (verticalMovement != 0 || horizontalMovement != 0)
+        {
+            energy -= Time.deltaTime * movementEnergyCost * (Math.Abs(verticalMovement) + Math.Abs(horizontalMovement));
+            state.energy = energy;
+        }
+        else
+        {
+            GetComponent<Rigidbody>().velocity = Vector3.zero;
+            GetComponent<Rigidbody>().angularVelocity = Vector3.zero;
         }
     }
 
     private void Update()
     {
-        if (!isSelected) return;
+        if (!isSelected || !entity.IsOwner || energy < 50 || !TurnManager.instance.isMyTurn || !EventSystem.current.IsPointerOverGameObject()) return;
 
-        if (Physics.Raycast(Camera.main.ScreenPointToRay(Input.mousePosition), out RaycastHit hit) && Input.GetMouseButtonDown(1))
+        if (Physics.Raycast(Camera.main.ScreenPointToRay(Input.mousePosition), out RaycastHit hit))
         {
-            if (hit.collider.GetComponentInParent<Unit>() != null)
-            {
-                var targetUnit = hit.collider.GetComponentInParent<Unit>();
+            Ray shootRay;
 
-                if (CanAttack(ref targetUnit))
+            if (isMobile)
+            {
+                shootRay = new Ray(transform.position, new Vector3(attackJoystick.Horizontal, 0, attackJoystick.Vertical));
+            }
+            else
+            {
+                shootRay = new Ray(transform.position, (hit.point - transform.position).normalized);
+            }
+
+            if (Physics.Raycast(shootRay, out RaycastHit hit2, maxDistance))
+            {
+                lineRenderer.SetPosition(0, transform.position);
+                lineRenderer.SetPosition(1, hit2.point);
+
+                if (!isMobile)
                 {
-                    Attack(ref targetUnit);
+                    if (Input.GetMouseButtonDown(1))
+                    {
+                        if (hit2.collider.GetComponentInParent<Unit>() != null)
+                        {
+                            var targetUnit = hit2.collider.GetComponentInParent<Unit>();
+
+                            if (CanAttack(ref targetUnit))
+                            {
+                                Attack(ref targetUnit);
+
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    //Mobile shooting logic
+                    attackJoystick.OnPointerUp()
                 }
             }
+            else
+            {
+                lineRenderer.SetPosition(0, transform.position);
+                lineRenderer.SetPosition(1, transform.position);
+            }
+        }
+        else
+        {
+            lineRenderer.SetPosition(0, transform.position);
+            lineRenderer.SetPosition(1, transform.position);
+        }
+    }
+
+    public override void OnEvent(Shoot evnt)
+    {
+        health -= evnt.Damage;
+        healthBar.fillAmount = (1.0f * health) / 100;
+        if (health <= 0 && entity.IsOwner)
+        {
+            BoltNetwork.Destroy(gameObject);
         }
     }
 
     void Attack(ref Unit targetUnit)
     {
         energy = 0;
-        targetUnit.health -= damage;
-        print(targetUnit.health);
+        state.energy = energy;
+        var damageEvnt = Shoot.Create(targetUnit.entity);
+        damageEvnt.Damage = damage;
+        damageEvnt.Send();
     }
 
     bool CanAttack(ref Unit targetUnit)
@@ -106,16 +246,24 @@ public class Unit : MonoBehaviour, ISelectable
         {
             case UnitType.Melee:
                 //Range : 2
-                if(Vector3.Distance(transform.position, targetUnit.transform.position) < 2)
+                if(Vector3.Distance(transform.position, targetUnit.transform.position) < maxDistance)
                 {
                     return true;
                 }
                 return false;
             case UnitType.Sniper:
-                //Infinite range for now
-                return true;
+                if (Vector3.Distance(transform.position, targetUnit.transform.position) < maxDistance)
+                {
+                    return true;
+                }
+                return false;
             default:
                 return false;
         }
+    }
+
+    public void OnPointerUp(PointerEventData eventData)
+    {
+        throw new NotImplementedException();
     }
 }

@@ -1,33 +1,50 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using Photon.Bolt;
 
-public class TurnManager : MonoBehaviour
+public class TurnManager : GlobalEventListener
 {
-    private int turn;
+    public static TurnManager instance;
+    private void Awake()
+    {
+        instance = this;
+    }
 
     public delegate void OnNewTurnStarted();
     public static event OnNewTurnStarted onNewTurnStarted;
 
+    public int readyPlayerCount;
+
+    public bool isMyTurn;
+
+    private void Start()
+    {
+        if (BoltNetwork.IsServer)
+        {
+            isMyTurn = true;
+        }
+        GameObject.Find("EndTurnBTN").GetComponent<UnityEngine.UI.Button>().interactable = isMyTurn;
+    }
+
     public void OnClickNewTurn()
     {
-        turn++;
+        if (!isMyTurn)
+        {
+            return;
+        }
 
+        EndTurn endTurn = EndTurn.Create();
+        endTurn.Send();
+    }
+
+    public override void OnEvent(EndTurn evnt)
+    {
         if (onNewTurnStarted != null)
         {
             onNewTurnStarted();
+            isMyTurn = !isMyTurn;
+            GameObject.Find("EndTurnBTN").GetComponent<UnityEngine.UI.Button>().interactable = isMyTurn;
         }
-    }
-
-    // Start is called before the first frame update
-    void Start()
-    {
-        
-    }
-
-    // Update is called once per frame
-    void Update()
-    {
-        
     }
 }
