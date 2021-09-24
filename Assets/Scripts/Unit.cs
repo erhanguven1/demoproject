@@ -34,15 +34,15 @@ public class Unit : EntityEventListener<IUnitState>, ISelectable, IPointerUpHand
 
     public bool isMobile;
 
-    [SerializeField] private Joystick movementJoystick, attackJoystick;
+    [SerializeField] private FixedJoystick movementJoystick, attackJoystick;
 
 
     public void Init()
     {
         isMobile = GameManager.instance.isMobile;
 
-        movementJoystick = GameObject.Find("MovementJoystick").GetComponent<Joystick>();
-        attackJoystick = GameObject.Find("AttackJoystick").GetComponent<Joystick>();
+        movementJoystick = GameObject.Find("MovementJoystick").GetComponent<FixedJoystick>();
+        attackJoystick = GameObject.Find("AttackJoystick").GetComponent<FixedJoystick>();
 
         lineRenderer = gameObject.AddComponent<LineRenderer>();
         lineRenderer.positionCount = 2;
@@ -160,7 +160,7 @@ public class Unit : EntityEventListener<IUnitState>, ISelectable, IPointerUpHand
 
     private void Update()
     {
-        if (!isSelected || !entity.IsOwner || energy < 50 || !TurnManager.instance.isMyTurn || !EventSystem.current.IsPointerOverGameObject()) return;
+        if (!isSelected || !entity.IsOwner || energy < 50 || !TurnManager.instance.isMyTurn) return;
 
         if (Physics.Raycast(Camera.main.ScreenPointToRay(Input.mousePosition), out RaycastHit hit))
         {
@@ -199,7 +199,10 @@ public class Unit : EntityEventListener<IUnitState>, ISelectable, IPointerUpHand
                 else
                 {
                     //Mobile shooting logic
-                    attackJoystick.OnPointerUp()
+                    if(attackJoystick.pointerUp)
+                    {
+                        print("boom");
+                    }
                 }
             }
             else
