@@ -8,6 +8,8 @@ public class FixedJoystick : Joystick
     public bool isTouching;
     public bool pointerUp, pointerDown;
 
+    public float totalValue;
+
     public override void OnPointerDown(PointerEventData eventData)
     {
         pointerDown = true;
@@ -29,8 +31,16 @@ public class FixedJoystick : Joystick
         StartCoroutine(wait());
         IEnumerator wait()
         {
-            yield return new WaitForEndOfFrame();
+            yield return new WaitForSeconds(.1f);
             pointerUp = false;
+        }
+    }
+
+    private void Update()
+    {
+        if (isTouching)
+        {
+            totalValue = Mathf.Abs(Vertical) + Mathf.Abs(Horizontal);
         }
     }
 }

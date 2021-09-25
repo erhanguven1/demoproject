@@ -201,7 +201,35 @@ public class Unit : EntityEventListener<IUnitState>, ISelectable, IPointerUpHand
                     //Mobile shooting logic
                     if(attackJoystick.pointerUp)
                     {
-                        print("boom");
+                        if (attackJoystick.totalValue > .2f)
+                        {
+                            print("boom");
+                            if (hit2.collider.GetComponentInParent<Unit>() != null)
+                            {
+                                var targetUnit = hit2.collider.GetComponentInParent<Unit>();
+
+                                if (CanAttack(ref targetUnit))
+                                {
+                                    Attack(ref targetUnit);
+
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            else if (isMobile)
+            {
+                lineRenderer.SetPosition(0, transform.position);
+                lineRenderer.SetPosition(1, transform.position + maxDistance * (new Vector3(attackJoystick.Horizontal, 0, attackJoystick.Vertical).normalized));
+
+                if (attackJoystick.pointerUp)
+                {
+                    if (attackJoystick.totalValue > .2f)
+                    {
+                        print("boom but weaker");
+                        energy = 0;
+                        state.energy = energy;
                     }
                 }
             }

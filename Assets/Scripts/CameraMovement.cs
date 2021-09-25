@@ -29,9 +29,21 @@ public class CameraMovement : MonoBehaviour
 
     private void Update()
     {
-        if (Input.GetKey(KeyCode.Space))
+        if (!GameManager.instance.isMobile)
         {
-            cam.transform.position += Vector3.forward * Input.GetAxis("Mouse Y") + Vector3.right * Input.GetAxis("Mouse X");
+            if (Input.GetKey(KeyCode.Space))
+            {
+                cam.transform.position += Vector3.forward * Input.GetAxis("Mouse Y") + Vector3.right * Input.GetAxis("Mouse X");
+            }
+        }
+        else
+        {
+            Input.simulateMouseWithTouches = true;
+            if (TouchManager.instance.GetState() == TouchState.Touching) // If touching the screen
+            {
+                var delta = TouchManager.instance.GetTouchDelta();
+                cam.transform.position += Vector3.forward * delta.y + Vector3.right * delta.x;
+            }
         }
     }
 }
